@@ -10,18 +10,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This Dockerfile in external/openliberty-mp-tck/dockerfile dir is used to create an image with
+# This Dockerfile in external/quarkus-test/dockerfile dir is used to create an image with
 # AdoptOpenJDK jdk binary installed. Basic test dependent executions
 # are installed during the building process.
 #
-# Build example: `docker build -t adoptopenjdk-openliberty-mp-tck -f Dockerfile ../.`
+# Build example: `docker build -t adoptopenjdk-quarkus-test -f Dockerfile ../.`
 #
 # This Dockerfile builds image based on adoptopenjdk/openjdk8:latest.
 # If you want to build image based on other images, please use
 # `--build-arg list` to specify your base image
 #
-# Build example: `docker build --build-arg IMAGE_NAME=<image_name> --build-arg IMAGE_VERSION=<image_version> -t adoptopenjdk-openliberty-mp-tck .`
+# Build example: `docker build --build-arg IMAGE_NAME=<image_name> --build-arg IMAGE_VERSION=<image_version >-t adoptopenjdk-quarkus-test .`
 
+ 
 ARG SDK=openjdk8
 ARG IMAGE_NAME=adoptopenjdk/$SDK
 ARG IMAGE_VERSION=nightly
@@ -31,31 +32,20 @@ FROM $IMAGE_NAME:$IMAGE_VERSION
 # Install test dependent executable files
 RUN apt-get update \
 	&& apt-get -y install \
-	ant \
-	apt-transport-https \
-	ca-certificates \
-	dirmngr \
-	curl \
 	git \
-	unzip \
-	wget
-	
-# Install openliberty-mp-tck tests dependent
-RUN apt-get update \
-	&& apt-get -y install \
-	maven
+	wget 
 
+ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF8"
+ENV MODE="java"
 
-WORKDIR /
-ENV OPENLIBERTY_HOME $WORKDIR
+COPY ./dockerfile/quarkus-test.sh /quarkus-test.sh
 RUN mkdir testResults
+WORKDIR /
+RUN pwd
+RUN git clone https://github.com/quarkusio/quarkus.git
+  
+# if MODE=-Dnative, then get graalvm
+# RUN wget https://ci.adoptopenjdk.net/view/all/job/jdk8-with-graal_build_x86-64_linux/lastSuccessfulBuild/artifact/build/x86_64/linux_macos/jdk8-with-graal-local/jdk8-with-graal-jdk.tar.gz
 
-ENV  JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF8"
-
-COPY ./dockerfile/openliberty-mp-tck.sh /openliberty-mp-tck.sh
-
-#Clone openliberty repo 
-RUN git clone -q git://github.com/OpenLiberty/open-liberty
-
-ENTRYPOINT ["/bin/bash", "/openliberty-mp-tck.sh"]
-CMD [""]
+ENTRYPOINT ["/bin/bash", "/quarkus-test.sh"]
+CMD ["$MODE"]
