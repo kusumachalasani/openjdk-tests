@@ -160,7 +160,7 @@ getBinaryOpenjdk()
 	cd $SDKDIR
 	mkdir -p openjdkbinary
 	cd openjdkbinary
-	
+
 	if [ "$SDK_RESOURCE" != "upstream" ]; then
 		if [ "$(ls -A $SDKDIR/openjdkbinary)" ]; then
         	echo "$SDKDIR/openjdkbinary is not an empty directory, please empty it or specify a different SDK directory."
@@ -180,7 +180,6 @@ getBinaryOpenjdk()
 		os=${PLATFORM#*_}
 		os=${os%_xl}
 		arch=${PLATFORM%%_*}
-		OPENJDK_VERSION="openjdk${JDK_VERSION}"
 		heap_size="normal"
 		if [[ $PLATFORM = *"_xl"* ]]; then
 			heap_size="large"
@@ -191,7 +190,11 @@ getBinaryOpenjdk()
 		if [[ $arch = *"x86-32"* ]]; then
 			arch="x32"
 		fi
-		download_url="https://api.adoptopenjdk.net/v2/binary/${SDK_RESOURCE}/${OPENJDK_VERSION}?openjdk_impl=${JDK_IMPL}&os=${os}&arch=${arch}&release=${RELEASES}&type=${TYPE}&heap_size=${heap_size}"
+		release_type="ea"
+		if [ "$SDK_RESOURCE" == "releases" ]; then
+			release_type="ga"
+		fi
+		download_url="https://api.adoptopenjdk.net/v3/binary/latest/${JDK_VERSION}/${release_type}/${os}/${arch}/jdk/${JDK_IMPL}/${heap_size}/adoptopenjdk"
 	else
 		download_url=""
 		echo "--sdkdir is set to $SDK_RESOURCE. Therefore, skip download jdk binary"
@@ -210,8 +213,21 @@ getBinaryOpenjdk()
 					echo "curl error code: $download_exit_code. Sleep $sleep_time secs, then retry $count..."
 					sleep $sleep_time
 				fi
-				echo "curl -OLJSks ${curl_options} $file"
-				curl -OLJSks ${curl_options} $file
+
+				case "$VERBOSE_CURL" in
+					VERBOSE)
+						curl_verbosity="v"
+						;;
+					NORMAL)
+						curl_verbosity=''
+						;;
+					*)
+						curl_verbosity="s"
+						;;
+				esac
+
+				echo "_ENCODE_FILE_NEW=UNTAGGED curl -OLJSk${curl_verbosity} ${curl_options} $file"
+				_ENCODE_FILE_NEW=UNTAGGED curl -OLJSk${curl_verbosity} ${curl_options} $file
 				download_exit_code=$?
 				count=$(( $count + 1 ))
 			done
@@ -231,7 +247,7 @@ getBinaryOpenjdk()
 	jar_file_array=(${jar_files//\\n/ })
 	for jar_name in "${jar_file_array[@]}"
 		do
-			if [ -d "$SDKDIR/openjdkbinary/tmp" ]; then 
+			if [ -d "$SDKDIR/openjdkbinary/tmp" ]; then
 				rm -rf $SDKDIR/openjdkbinary/tmp/*
 			else
 				mkdir $SDKDIR/openjdkbinary/tmp
@@ -243,7 +259,7 @@ getBinaryOpenjdk()
 			else
 				gzip -cd $jar_name | tar xof - -C ./tmp
 			fi
-			
+
 			cd ./tmp
 			jar_dirs=`ls -d */`
 			jar_dir_array=(${jar_dirs//\\n/ })
@@ -279,8 +295,8 @@ getOpenJDKSources() {
 	cd $TESTDIR
 	mkdir -p openjdk/src
 	cd openjdk/src
-	echo "curl -OLJks --retry 5 --retry-delay 300 ${curl_options} $CUSTOMIZED_SDK_SOURCE_URL"
-	curl -OLJks --retry 5 --retry-delay 300 ${curl_options} $CUSTOMIZED_SDK_SOURCE_URL
+	echo "_ENCODE_FILE_NEW=UNTAGGED curl -OLJks --retry 5 --retry-delay 300 ${curl_options} $CUSTOMIZED_SDK_SOURCE_URL"
+	_ENCODE_FILE_NEW=UNTAGGED curl -OLJks --retry 5 --retry-delay 300 ${curl_options} $CUSTOMIZED_SDK_SOURCE_URL
 	sources_file=`ls`
 	if [[ $sources_file == *zip || $sources_file == *jar ]]; then
 		unzip -q $sources_file -d .
@@ -340,10 +356,13 @@ getFunctionalTestMaterial()
 		cd openj9
 		echo "git fetch -q --unshallow"
 		git fetch -q --unshallow
-		echo "git fetch -q --tags $OPENJ9_REPO +refs/pull/*:refs/remotes/origin/pr/*"
-		git fetch -q --tags $OPENJ9_REPO +refs/pull/*:refs/remotes/origin/pr/*
-		echo "git checkout -q $OPENJ9_SHA"
-		git checkout -q $OPENJ9_SHA
+		if ! git checkout $OPENJ9_SHA; then
+			echo "SHA not yet found. Continue fetching PR refs and tags..."
+			echo "git fetch -q --tags $OPENJ9_REPO +refs/pull/*:refs/remotes/origin/pr/*"
+			git fetch -q --tags $OPENJ9_REPO +refs/pull/*:refs/remotes/origin/pr/*
+			echo "git checkout -q $OPENJ9_SHA"
+			git checkout -q $OPENJ9_SHA
+		fi
 		cd $TESTDIR
 	fi
 
@@ -467,7 +486,7 @@ checkRepoSHA()
 
 checkTestRepoSHAs()
 {
-	echo "check AdoptOpenJDK repo and TKG repo SHA" 
+	echo "check AdoptOpenJDK repo and TKG repo SHA"
 
 	output_file="$TESTDIR/TKG/SHA.txt"
 	if [ -e ${output_file} ]; then
@@ -481,7 +500,7 @@ checkTestRepoSHAs()
 
 checkOpenJ9RepoSHA()
 {
-	echo "check OpenJ9 Repo sha" 
+	echo "check OpenJ9 Repo sha"
 	checkRepoSHA "$TESTDIR/openj9"
 }
 
